@@ -14,6 +14,7 @@ These are independent LXD adaptations informed by the [Community Scripts](https:
 | `pocketbase-lxd.sh` | [PocketBase](https://pocketbase.io/) | 8080 | Debian/Ubuntu, Alpine |
 | `metabase-lxd.sh` | [Metabase](https://www.metabase.com/) | 3000 | Debian/Ubuntu |
 | `valkey-lxd.sh` | [Valkey](https://valkey.io/) | 6379 | Debian/Ubuntu, Alpine |
+| `postgresql-lxd.sh` | [PostgreSQL](https://www.postgresql.org/) | 5432 | Debian/Ubuntu, Alpine |
 | `lxd-auto-update.sh` | Auto-updater | N/A | LXD host only |
 
 ## Requirements
@@ -48,6 +49,9 @@ FORGEJO_INSTANCE=https://codeberg.org \
 
 # Create a Valkey container
 LXD_PROXY=true ./valkey-lxd.sh --create
+
+# Create a PostgreSQL container
+PG_VERSION=17 LXD_PROXY=true ./postgresql-lxd.sh --create
 ```
 
 ## Common Commands
@@ -187,6 +191,17 @@ See each script's `--help` output for application-specific variables (ports, ver
 - Optional TLS with self-signed cert (`VALKEY_TLS=true`)
 - Bind address configurable via `--set-bind`
 
+### postgresql-lxd.sh
+
+- Installs from official PGDG repository (Debian) or apk (Alpine)
+- Version selectable: `PG_VERSION=15|16|17|18` (Alpine: 15-17)
+- Auto-generates random superuser password stored in `/root/postgresql.creds`
+- Configured for remote access out of the box (`listen_addresses='*'`, md5 auth)
+- SSL enabled by default (Debian snakeoil cert)
+- `shared_buffers=128MB`, `max_connections=100`, WAL tuned
+- Optional Adminer web UI via `PG_ADMINER=true` (Apache on Debian, lighttpd on Alpine)
+- Data preserved across updates (`/var/lib/postgresql` untouched)
+
 ## Design Principles
 
 - **Self-contained**: Each script is a single file with no external dependencies beyond standard system tools.
@@ -196,5 +211,7 @@ See each script's `--help` output for application-specific variables (ports, ver
 - **Dual-use**: Each script works both from the LXD host (orchestration) and inside a guest (direct installation).
 
 ## License
+
+MIT License. See [LICENSE](LICENSE) for details.
 
 These scripts are independently written. The upstream Community Scripts project that inspired them is MIT-licensed: https://github.com/community-scripts/ProxmoxVE/blob/main/LICENSE
