@@ -65,7 +65,7 @@ Guest operations:
 
 Host environment variables:
   LXD_CONTAINER=forgejo-runner   Existing or new container name.
-  LXD_IMAGE=images:ubuntu/26.04     LXD image to launch with --create only.
+  LXD_IMAGE=ubuntu:default     LXD image to launch with --create only.
   LXD_NESTING=true               Enable container nesting (required for Podman).
   LXD_KEYCTL=true                Enable keyctl syscall interception.
 
@@ -530,7 +530,7 @@ host_create() {
   require_command lxc
 
   name=${LXD_CONTAINER:-forgejo-runner}
-  image=${LXD_IMAGE:-images:ubuntu/26.04}
+  image=${LXD_IMAGE:-ubuntu:default}
   nesting="$(normalize_boolean "${LXD_NESTING:-true}")"
   keyctl="$(normalize_boolean "${LXD_KEYCTL:-true}")"
   validate_lxd_container_name "$name"

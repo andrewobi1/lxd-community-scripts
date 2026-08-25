@@ -66,7 +66,7 @@ Guest operations:
 
 Host environment variables:
   LXD_CONTAINER=valkey        Existing or new container name.
-  LXD_IMAGE=images:ubuntu/26.04  LXD image to launch with --create only.
+  LXD_IMAGE=ubuntu:default  LXD image to launch with --create only.
   LXD_PROXY=false             Set true/1 to add an LXD proxy device with --create only.
   LXD_PROXY_LISTEN=0.0.0.0   Host address used by the proxy device.
   LXD_PROXY_PORT=6379         Host port used by the proxy device.
@@ -643,7 +643,7 @@ host_create() {
   require_command lxc
 
   name=${LXD_CONTAINER:-valkey}
-  image=${LXD_IMAGE:-images:ubuntu/26.04}
+  image=${LXD_IMAGE:-ubuntu:default}
   port=${VALKEY_PORT:-6379}
   validate_port "$port" VALKEY_PORT
   proxy="$(normalize_boolean "${LXD_PROXY:-false}")"

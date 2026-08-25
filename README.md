@@ -25,8 +25,8 @@ These are independent LXD adaptations informed by the [Community Scripts](https:
 
 ## Supported Guest Operating Systems
 
-- **Ubuntu 26.04** (default)
-- **Debian 13** (use `LXD_IMAGE=images:debian/13`)
+- **Ubuntu** (default, via `ubuntu:default` — latest LTS from Canonical's image server)
+- **Debian 14** (use `LXD_IMAGE=images:debian/14`)
 - **Alpine** (where noted per script; use `LXD_IMAGE=images:alpine/3.24`)
 
 ## Quick Start
@@ -139,7 +139,7 @@ Environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LXD_CONTAINER` | (per script) | Container name |
-| `LXD_IMAGE` | `images:ubuntu/26.04` | LXD image for `--create` (also supports `images:debian/13`, `images:alpine/3.24`) |
+| `LXD_IMAGE` | `ubuntu:default` | LXD image for `--create` (also supports `images:debian/14`, `images:alpine/3.24`) |
 | `LXD_STATIC_IP` | `true` | Convert DHCP-assigned IP to a static configuration on new containers |
 | `LXD_PROXY` | `false` | Add an LXD proxy device |
 | `LXD_PROXY_LISTEN` | `0.0.0.0` | Proxy listen address |
