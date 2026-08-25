@@ -23,6 +23,12 @@ These are independent LXD adaptations informed by the [Community Scripts](https:
 - Bash 4.4+ on the host
 - Internet access for downloading releases
 
+## Supported Guest Operating Systems
+
+- **Ubuntu 26.04** (default)
+- **Debian 13** (use `LXD_IMAGE=images:debian/13`)
+- **Alpine** (where noted per script; use `LXD_IMAGE=images:alpine/3.24`)
+
 ## Quick Start
 
 ```bash
@@ -133,7 +139,8 @@ Environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LXD_CONTAINER` | (per script) | Container name |
-| `LXD_IMAGE` | `images:debian/13` | LXD image for `--create` |
+| `LXD_IMAGE` | `images:ubuntu/26.04` | LXD image for `--create` (also supports `images:debian/13`, `images:alpine/3.24`) |
+| `LXD_STATIC_IP` | `true` | Convert DHCP-assigned IP to a static configuration on new containers |
 | `LXD_PROXY` | `false` | Add an LXD proxy device |
 | `LXD_PROXY_LISTEN` | `0.0.0.0` | Proxy listen address |
 | `LXD_PROXY_PORT` | (per script) | Proxy host port |
@@ -207,6 +214,7 @@ See each script's `--help` output for application-specific variables (ports, ver
 - **Self-contained**: Each script is a single file with no external dependencies beyond standard system tools.
 - **Idempotent**: Safe to re-run. Existing data and configuration are preserved.
 - **Updateable**: `--update` / `--update-container` replaces only application artifacts, never touching user data.
+- **Stable IPs**: On `--create`, the DHCP-assigned IP is automatically converted to a static configuration so the container address never changes after a reboot. Disable with `LXD_STATIC_IP=false`.
 - **Secure defaults**: Credentials are never logged, tokens are hashed, config files are mode 0600, TLS is enabled where applicable.
 - **Dual-use**: Each script works both from the LXD host (orchestration) and inside a guest (direct installation).
 

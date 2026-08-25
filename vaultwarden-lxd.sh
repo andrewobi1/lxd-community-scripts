@@ -71,7 +71,7 @@ Guest operations:
 
 Host environment variables:
   LXD_CONTAINER=vaultwarden   Existing or new container name.
-  LXD_IMAGE=images:debian/13 LXD image to launch with --create only.
+  LXD_IMAGE=images:ubuntu/26.04 LXD image to launch with --create only.
   LXD_PROXY=false             Set true/1 to add an LXD proxy device with --create only.
   LXD_PROXY_LISTEN=0.0.0.0   Host address used by the proxy device.
   LXD_PROXY_PORT=8000        Host port used by the proxy device.
@@ -843,6 +843,131 @@ host_wait_for_exec() {
   die "LXD container ${name} did not become ready for lxc exec."
 }
 
+host_wait_for_ip() {
+  local name=$1 attempt ip=""
+  for attempt in {1..30}; do
+    ip="$(lxc list "$name" --format csv -c 4 2>/dev/null | \
+      tr ',' '\n' | awk '/^[0-9]+\./ { print; exit }')" || true
+    if [[ -n "$ip" ]]; then
+      printf '%s\n' "$ip"
+      return 0
+    fi
+    sleep 2
+  done
+  warn "Container ${name} did not receive an IPv4 address within 60 seconds."
+  return 1
+}
+
+host_set_static_ip() {
+  local name=$1 ip gateway subnet cidr nic
+  local static="${LXD_STATIC_IP:-true}"
+  static="$(normalize_boolean "$static")"
+  [[ "$static" == true ]] || return 0
+
+  ip="$(host_wait_for_ip "$name")" || return 0
+
+  # Determine the network interface device name used by the container
+  nic="$(lxc config device show "$name" 2>/dev/null | awk '/^[a-z].*:$/ {name=substr($1,1,length($1)-1)} /nictype:|network:/ {print name; exit}')" || true
+  [[ -n "$nic" ]] || nic="eth0"
+
+  # Get the parent network to find the gateway and subnet
+  local network
+  network="$(lxc config device get "$name" "$nic" network 2>/dev/null)" || true
+  if [[ -n "$network" ]]; then
+    # Get subnet from the managed network
+    cidr="$(lxc network get "$network" ipv4.address 2>/dev/null)" || true
+    if [[ -n "$cidr" && "$cidr" == */* ]]; then
+      gateway="${cidr%%/*}"
+      subnet="${cidr##*/}"
+    fi
+  fi
+
+  # Fallback: detect gateway from inside the container
+  if [[ -z "${gateway:-}" ]]; then
+    gateway="$(lxc exec "$name" -- ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')" || true
+  fi
+  if [[ -z "${subnet:-}" ]]; then
+    subnet="$(lxc exec "$name" -- ip -4 addr show 2>/dev/null | awk -v ip="$ip" '$0 ~ ip {split($2,a,"/"); print a[2]; exit}')" || true
+  fi
+  [[ -n "${subnet:-}" ]] || subnet="24"
+
+  # Apply static IP via LXD device override
+  lxc config device override "$name" "$nic" \
+    ipv4.address="${ip}" 2>/dev/null \
+    && log "Static IP set: ${ip}/${subnet} (device: ${nic})" \
+    || {
+      # Fallback: configure inside the guest via netplan or /etc/network/interfaces
+      host_set_static_ip_guest "$name" "$ip" "$subnet" "${gateway:-}"
+    }
+}
+
+host_set_static_ip_guest() {
+  local name=$1 ip=$2 subnet=$3 gateway=$4
+
+  # Try netplan first (Ubuntu)
+  if lxc exec "$name" -- test -d /etc/netplan 2>/dev/null; then
+    lxc exec "$name" -- bash -c "
+      cat > /etc/netplan/50-static.yaml <<NETPLAN
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: false
+      addresses:
+        - ${ip}/${subnet}
+      routes:
+        - to: default
+          via: ${gateway}
+      nameservers:
+        addresses:
+          - 1.1.1.1
+          - 8.8.8.8
+NETPLAN
+      chmod 0600 /etc/netplan/50-static.yaml
+      rm -f /etc/netplan/10-lxc.yaml 2>/dev/null
+      netplan apply 2>/dev/null
+    " && log "Static IP configured via netplan: ${ip}/${subnet} gw ${gateway}" \
+      || warn "Failed to apply static IP via netplan."
+
+  # Try /etc/network/interfaces (Debian)
+  elif lxc exec "$name" -- test -f /etc/network/interfaces 2>/dev/null; then
+    lxc exec "$name" -- bash -c "
+      cat > /etc/network/interfaces <<IFACES
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address ${ip}/${subnet}
+    gateway ${gateway}
+    dns-nameservers 1.1.1.1 8.8.8.8
+IFACES
+      ifdown eth0 2>/dev/null; ifup eth0 2>/dev/null
+    " && log "Static IP configured via /etc/network/interfaces: ${ip}/${subnet} gw ${gateway}" \
+      || warn "Failed to apply static IP via interfaces file."
+
+  # Alpine
+  elif lxc exec "$name" -- test -f /etc/network/interfaces 2>/dev/null || \
+       lxc exec "$name" -- command -v rc-service >/dev/null 2>&1; then
+    lxc exec "$name" -- bash -c "
+      cat > /etc/network/interfaces <<IFACES
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address ${ip}
+    netmask ${subnet}
+    gateway ${gateway}
+IFACES
+      rc-service networking restart 2>/dev/null
+    " && log "Static IP configured (Alpine): ${ip}/${subnet} gw ${gateway}" \
+      || warn "Failed to apply static IP on Alpine."
+  else
+    warn "Could not determine network configuration method for static IP."
+  fi
+}
+
 host_start_existing_container() {
   local name=$1 state
   host_container_exists "$name" \
@@ -932,7 +1057,7 @@ host_create() {
   require_command lxc
 
   name=${LXD_CONTAINER:-vaultwarden}
-  image=${LXD_IMAGE:-images:debian/13}
+  image=${LXD_IMAGE:-images:ubuntu/26.04}
   port=${VAULTWARDEN_PORT:-8000}
   validate_port "$port" VAULTWARDEN_PORT
   proxy="$(normalize_boolean "${LXD_PROXY:-false}")"
@@ -948,6 +1073,7 @@ host_create() {
     log "Launching ${name} from ${image}."
     lxc launch "$image" "$name"
     host_wait_for_exec "$name"
+    host_set_static_ip "$name"
   fi
 
   log "Installing Vaultwarden inside ${name}."
